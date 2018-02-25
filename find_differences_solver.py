@@ -4,8 +4,7 @@ from numpy import unravel_index
 import glob
 import math
 from matplotlib import pyplot as plt
-from matplotlib.colors import LogNorm
-import random
+
 
 MIN_PICTURE_SIZE = 50 # minimal size of a picture
 images = glob.glob('./dataset/*.jpg')
@@ -35,32 +34,56 @@ for name in images:
             matches[i][0],matches[i][1] = matches[i][1], matches[i][0]
             pts = np.array([kp2[matches[i][j].trainIdx].pt for j in range(2)], np.int32)
             dist = cv2.norm(pts[0], pts[1])
-            if (dist < MIN_PICTURE_SIZE):
+            if dist < MIN_PICTURE_SIZE:
                 continue            
             dist_norm =  math.sqrt( dist * dist / (img.shape[0] * img.shape[1]))
-            angle = abs(np.arcsin((pts[0][1] - pts[1][1])/dist))
-          
-            start_points.append(pts[0])
-            end_points.append(pts[1])
-            angles.append(angle)
-            distances.append(dist_norm)
+            angle = (np.arcsin((pts[0][1] - pts[1][1])/dist))
+            if angle > 0:
+                start_points.append(pts[0])
+                end_points.append(pts[1])
+                angles.append(angle)
+                distances.append(dist)
    
     translations.append(np.array(zip(distances, angles)))
 
     # find the most dense area of [translation distance, trabslation angle] space
     hist = plt.hist2d(distances, angles, bins=32)
+    plt.colorbar()
     plt.show()
     (x,y) = unravel_index(hist[0].argmax(), hist[0].shape)
     dist_low_bound = hist[1][x]
     dist_high_bound = hist[1][x+1]
     angle_low_bound = hist[2][y]
     angle_high_bound = hist[2][y+1]
-
-    print("angle:" + str((angle_low_bound + angle_high_bound)/2))
-    print("distance:" + str((dist_low_bound+dist_high_bound)/2))
+    
+    filtered_start_points = []
+    filtered_end_points= []
+    translation_angle = (angle_low_bound + angle_high_bound)/2
+    translation_dist = (dist_low_bound+dist_high_bound)/2
+    print("angle:" + str(translation_angle))
+    print("distance:" + str(translation_dist))
     for i,p in enumerate(start_points):
         if (angle_low_bound <= angles[i] <= angle_high_bound) and (dist_low_bound <= distances[i] <= dist_high_bound):
-                cv2.line(img2, (start_points[i][0], start_points[i][1]), (end_points[i][0],end_points[i][1]) ,(255,0,255),1) 
+                #cv2.line(img2, (start_points[i][0], start_points[i][1]), (end_points[i][0],end_points[i][1]), (255,0,255),1) 
+                filtered_start_points.append(start_points[i])
+                filtered_end_points.append(end_points[i])
+    x1,y1,w,h = cv2.boundingRect(np.array(filtered_start_points))
+    cv2.rectangle(img2, (x1,y1), (x1+w, y1+h), (0,100,255),3)
+
+    '''
+    x2 = x1
+    if translation_angle > 0:
+        x2 = x2 - (translation_dist * np.cos(translation_angle))
+    else :
+        x2 = x2 + (translation_dist * np.cos(translation_angle))
+
+    y2 = y1   - (translation_dist * np.sin(translation_angle))
+    
+    cv2.rectangle(img2, (int(x2),int(y2)), (int(x2 + w),int(y2 + h)), (255,255,0),3)
+    '''
+    x2,y2,w2,h2 = cv2.boundingRect(np.array(filtered_end_points))
+
+    cv2.rectangle (img2, (x2,y2), (x2+w2, y2+h2), (100,255,0),3)
 
     cv2.imwrite('results/' + file_name + '_result.png', img2)
     print('===' + str(index) + '========================================')
